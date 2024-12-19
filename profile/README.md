@@ -19,6 +19,10 @@ Contains all of the repositories used to work with the Unitree-Go1 robot.
     - [ROS2 Iron](#ros2-iron)
     - [ROS2 Jazzy](#ros2-jazzy)
 - [Installing Docker](#installing-docker)
+- [Connecting to a Physical Unitree Go1 Robot](#connecting-to-a-physical-unitree-go1-robot)
+    - [Turn on Physical Go1 Robot](#turn-on-physical-go1-robot)
+    - [Connect to Physical Go1 Robot over Ethernet](#connect-to-physical-go1-robot-over-ethernet)
+    - [Connect to Physical Go1 Robot over WiFi](#connect-to-physical-go1-robot-over-wifi)
 
 ## Contributors
 Created by [Shaun Altmann](https://github.com/ShaunAlt).
@@ -27,10 +31,10 @@ Created by [Shaun Altmann](https://github.com/ShaunAlt).
 | Repository | Purpose |
 | :---: | :---: |
 | [Go1-Nav2-SDK](https://github.com/ShaunAlt-Unitree-Go1/Go1-Nav2-SDK) | Software Development Kit that allows the implementation of the ROS2 Navigation Stack with a Unitree Go1 Robot. |
-| [Go1-Webots-Docker](https://github.com/ShaunAlt-Unitree-Go1/Go1-Webots-Docker) | Docker used to simulate the Unitree Go1 Robot in a Webots simulator environment. |
+| [Go1-Webots-Docker](https://github.com/ShaunAlt-Unitree-Go1/Go1-Webots-Docker) | Creates a Docker to run the Unitree-Go1 robot within a Webots simulator. |
 | [Reolink-Camera-ROS2](https://github.com/ShaunAlt-Unitree-Go1/Reolink-Camera-ROS2) | Wirelessly stream data from the Reolink RTC-840WA camera and publish it in ROS2. |
 | [ROS-Bridge-Docker](https://github.com/ShaunAlt-Unitree-Go1/ROS-Bridge-Docker) | Creates a Docker for bridging ROS1 Noetic and ROS2 Galactic topics. |
-| [ROS-Bridge-Noetic](https://github.com/ShaunAlt-Unitree-Go1/ROS-Bridge-Noetic) | Support Packages for the ROS Noetic side of the ROS Bridge. |
+| [ROS-Bridge-Noetic](https://github.com/ShaunAlt-Unitree-Go1/ROS-Bridge-Noetic) | ROS Noetic support packages that can be used with the ROS Bridge. |
 | [Unitree-Go1-Motion-ROS2](https://github.com/ShaunAlt-Unitree-Go1/Unitree-Go1-Motion-ROS2) | Send /cmd_vel commands to the Unitree Go1 robot using ROS2. |
 | [Unitree-Go1-Sim](https://github.com/ShaunAlt-Unitree-Go1/Unitree-Go1-Sim) | Unitree Go1 Robot Full Simulation with LiDAR and Camera Support. |
 
@@ -403,3 +407,97 @@ $ xhost +local:
 # restart your VM
 $ sudo reboot
 ```
+
+## Connecting to a Physical Unitree Go1 Robot
+### Turn on Physical Go1 Robot
+The process to turn on the GO1 Robot can be found in this [video](https://www.youtube.com/watch?v=VbabuAhol0E).
+
+### Connect to Physical Go1 Robot over Ethernet
+The robot can be connected to via ethernet by turning it on and completing the following steps:
+1. Connect the robot and laptop together via an ethernet link.
+2. Get the ethernet port name on your computer.
+    ``` bash
+    $ sudo ifconfig
+    ...
+    enp0s25: ... # en* means ethernet port - this is the port we want
+    ...
+    ```
+3. Set a static connection to the robot.
+    ``` bash
+    $ sudo ifconfig enp0s25 down # replace with your port name
+    $ sudo ifconfig enp0s25 192.168.123.162/24
+    $ sudo ifconfig enp0s25 up
+    ```
+4. SSH to test connection.
+    ``` bash
+    $ ssh pi@192.168.12.1
+    Password: 123
+    ```
+
+### Connect to Physical Go1 Robot over WiFi
+> [!NOTE]
+> The robot produces a 5GHz wifi signal.
+
+The robot can be connected to via wifi by turning it on and completing the following steps:
+1. The robot's wifi connection name will start with `Unitree_Go`.
+2. The robot's password will be `00000000` (8x zeros).
+3. SSH to test connection.
+    ``` bash
+    # on your machine
+    $ ssh pi@192.168.12.1
+    Password: 123
+    ```
+
+The following steps will need to be implemented the very first time you try to connect wirelessly to the robot.
+1. SSH into the robot.
+    ``` bash
+    # on your machine
+    $ ssh pi@192.168.12.1
+    Password: 123
+    ```
+2. Update the Robot's System Configuration File.
+    ``` bash
+    # inside the robot
+    $ sudo vi /etc/sysctl.conf
+    ```
+    - Uncomment (remove the `#` character) from the `net.ipv4.ip_forward=1` line if it is not already uncommented.
+3. Update the Robot's IP Tables.
+    ``` bash
+    # inside the robot
+
+    # flush the ip tables
+    $ sudo iptables -F
+
+    # flash the NAT table
+    $ sudo iptables -t nat -F
+
+    # setup the NAT table routing
+    $ sudo iptables -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
+    $ sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    $ sudo iptables -A FORWARD -i wlan1 -o eth0 -j ACCEPT
+    $ sudo iptables -A FORWARD -i eth0 -o wlan1 -j ACCEPT
+    ```
+4. Restart the robot (using the power button).
+5. Add the robot's IP to your machine's list of hosts:
+    ``` bash
+    # inside your machine
+    $ sudo nano /etc/hosts
+    ```
+    - Add the following line underneath the other IPv4 values:
+        `192.168.123.161 raspberrypi`
+6. Restart your machine.
+
+The Go1 Robot has it's own `roscore` running. If you ever need to access this, source your ROS1 distribution, then set your ROS master and you will then be able to access the ROS data directly from the robot:
+``` bash
+# on your machine
+
+# source ros
+$ source_noetic # or whatever distribution you are using
+
+# set ros master
+$ export ROS_MASTER_URI='http://192.168.123.161:11311'
+
+# view ros topics (or whatever other you want to do)
+$ rostopic list
+```
+
