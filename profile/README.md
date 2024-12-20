@@ -23,6 +23,8 @@ Contains all of the repositories used to work with the Unitree-Go1 robot.
     - [Turn on Physical Go1 Robot](#turn-on-physical-go1-robot)
     - [Connect to Physical Go1 Robot over Ethernet](#connect-to-physical-go1-robot-over-ethernet)
     - [Connect to Physical Go1 Robot over WiFi](#connect-to-physical-go1-robot-over-wifi)
+- [Running Nav2 with a Simulated Swarm - OLD](#running-nav2-with-a-simulated-swarm---old)
+- [Running Nav2 with a Simulated Swarm - NEW](#running-nav2-with-a-simulated-swarm---new)
 
 ## Contributors
 Created by [Shaun Altmann](https://github.com/ShaunAlt).
@@ -501,3 +503,136 @@ $ export ROS_MASTER_URI='http://192.168.123.161:11311'
 $ rostopic list
 ```
 
+## Running Nav2 with a Simulated Swarm - OLD
+
+> [!NOTE]
+> These commands have been fully tested, however they are not as clean as the new launch files.
+
+For this tutorial, you will need to create an Ubuntu 20.04 VM, and install ROS Humble and Docker. Once this is done, you will need to then run the following commands to clone the required repositories ([Go1-Nav2-SDK](https://github.com/ShaunAlt-Unitree-Go1/Go1-Nav2-SDK), [ROS-Bridge-Docker](https://github.com/ShaunAlt-Unitree-Go1/ROS-Bridge-Docker), and [Unitree-Go1-Sim](https://github.com/ShaunAlt-Unitree-Go1/Unitree-Go1-Sim)) and build the required docker images (you can go to each repository for a more in-depth tutorial on each):
+``` bash
+# clone the docker github repositories
+$ cd ~/
+$ git clone https://github.com/ShaunAlt-Unitree-Go1/ROS-Bridge-Docker.git
+$ git clone https://github.com/ShaunAlt-Unitree-Go1/Unitree-Go1-Sim.git
+
+# build the docker images
+$ ./ROS-Bridge-Docker/docker/build_docker.bash
+$ ./Unitree-Go1-Sim/docker/build_docker.bash
+
+# make the nav2 workspace
+$ mkdir -p ~/nav2_ws/src
+$ cd ~/nav2_ws/src/
+$ git clone https://github.com/ShaunAlt-Unitree-Go1/Go1-Nav2-SDK.git
+$ cd ~/nav2_ws/
+$ source /opt/ros/humble/setup.bash
+$ rosdep install -y --from-paths src --ignore-src --rosdistro humble
+$ colcon build
+```
+
+To get the simulation and ROS2 navigation working, you will need 3-4 terminals (3 if using a single robot, 4 if using 2 robots).
+1. Open up the simulation docker and run the simulation:
+    ``` bash
+    # on your machine
+    $ cd ~/
+    $ ./Unitree-Go1-Sim/docker/run_docker.bash
+
+    # in the simulation docker
+    $ cd /home/rosuser/sim_ws/
+    $ source devel/setup.bash
+
+    # if simulating a single robot without a namespace
+    $ roslaunch go1_sim_addon single.launch
+
+    # if simulating a single robot with a namespace (r1)
+    $ roslaunch go1_sim_addon single_ns.launch
+
+    # if simulating 2 robots with namespaces (r1 and r2)
+    $ roslaunch go1_sim_addon two.launch
+    ```
+2. Open up the ROS Bridge docker and run the bridge:
+    ``` bash
+    # on your machine
+    $ cd ~/
+    $ ./ROS-Bridge-Docker/docker/run_docker.bash
+
+    # in the bridge docker
+    $ cd /home/rosuser/bridge_ws/
+    $ source install/setup.bash
+
+    # if simulating a single robot without a namespace
+    $ ./setup_params.bash
+
+    # if simulating a single robot with a namespace (r1)
+    $ ./setup_params.bash r1
+
+    # if simulating 2 robots with namespaces (r1 and r2)
+    $ ./setup_params.bash r1 r2
+
+    # run bridge
+    $ rosparam load bridge.yaml
+    $ ros2 run ros1_bridge parameter_bridge
+    ```
+3. Run the Navigation Stack for the Robots.
+    ``` bash
+    # on your machine
+    $ cd ~/nav2_ws/
+    $ source install/setup.bash
+
+    # if simulating a single robot without a namespace
+    $ ros2 launch go1_nav2_sdk single_launch.py
+
+    # if simulating a single robot with a namespace (r1)
+    $ ros2 launch go1_nav2_sdk r1_launch.py
+
+    # if simulating 2 robots with namespaces (r1 and r2)
+    $ ros2 launch go1_nav2_sdk r1_launch.py
+    $ ros2 launch go1_nav2_sdk r2_launch.py # in a new terminal
+    ```
+
+## Running Nav2 with a Simulated Swarm - NEW
+
+> [!NOTE]
+> The following commands have not been fully tested and may not work. You might have to use the `single.launch`, `single_ns.launch`, and `two.launch` commands as described in the [Unitree-Go1-Sim](https://github.com/ShaunAlt-Unitree-Go1/Unitree-Go1-Sim) documentation.
+
+You will need to open 1 terminal to launch the simulation, 1 terminal per robot you wish to spawn into the simulation, 1 terminal to bridge ROS1 and ROS2, and 1 terminal per robot you with to control with the ROS2 navigation stack (e.g. if you wanted to simulate 3 robots, you would need 1 simulation terminal, 3 spawn terminals, 1 bridge terminal, and 3 navigation terminals, meaning 8 terminals in total).
+- In the simulation terminal, run the following commands:
+    ``` bash
+    # on your machine
+    $ cd ~/
+    $ ./Unitree-Go1-Sim/docker/run_docker.bash
+
+    # in the simulation docker
+    $ cd /home/rosuser/sim_ws/
+    $ source devel/setup.bash
+    $ roslaunch go1_sim_addon gazebo.launch
+    ```
+- In each of the robot spawn terminals, run the following commands:
+    ``` bash
+    # on your machine
+    $ cd ~/
+    $ ./Unitree-Go1-Sim/docker/run_docker.bash -t
+
+    # in the simulation docker
+    $ cd /home/rosuser/sim_ws/
+    $ source devel/setup.bash
+    $ roslaunch go1_sim_addon spawn.launch # add arguments to each
+    ```
+- In the bridge terminal, run the following commands:
+    ``` bash
+    # on your machine
+    $ cd ~/
+    $ ./ROS-Bridge-Docker/docker/run_docker.bash
+
+    # in the bridge docker
+    $ cd /home/rosuser/bridge_ws/
+    $ source install/setup.bash
+    $ ./setup_params.bash robot_name_1 robot_name_X
+    $ rosparam load bridge.yaml
+    $ ros2 run ros1_bridge parameter_bridge
+    ```
+- In each of the navigation terminals, run the following commands:
+    ``` bash
+    # on your machine
+    $ cd ~/nav2_ws/
+    $ source install/setup.bash
+    $ ros2 launch go1_nav2_sdk 
